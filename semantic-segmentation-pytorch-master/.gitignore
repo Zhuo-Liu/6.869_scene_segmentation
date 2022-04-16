@@ -7,7 +7,4 @@ pretrained/
 
 .ipynb_checkpoints
 
-ADE_val*.jpg
-ADE_val*.png
-
 .idea/
