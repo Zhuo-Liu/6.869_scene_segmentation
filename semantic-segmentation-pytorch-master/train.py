@@ -1,4 +1,5 @@
 # System libs
+from json import load
 import os
 import time
 # import math
@@ -176,6 +177,15 @@ def main(cfg, gpus):
         drop_last=True,
         pin_memory=True)
     print('1 Epoch = {} iters'.format(cfg.TRAIN.epoch_iters))
+
+    for i in range(59):
+        data_sample = dataset_train[i]
+        img = data_sample['img_data'] #    Bx3x304x400
+        label = data_sample['seg_label'] # Bx38x50
+        print(img.size())
+        print(label.size())
+        print(label)
+
 
     # create loader iterator
     iterator_train = iter(loader_train)
