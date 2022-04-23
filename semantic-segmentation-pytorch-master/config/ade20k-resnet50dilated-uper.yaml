@@ -11,7 +11,7 @@ DATASET:
 
 MODEL:
   arch_encoder: "resnet50dilated"
-  arch_decoder: "danet"
+  arch_decoder: "ppm"
   fc_dim: 2048
 
 TRAIN:
