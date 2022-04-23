@@ -1,4 +1,5 @@
 # System libs
+from json import load
 import os
 import time
 # import math
@@ -93,6 +94,9 @@ def group_weight(module):
     group_decay = []
     group_no_decay = []
     for m in module.modules():
+        for name, param in m.named_parameters():
+            if name == 'gamma':
+                group_no_decay.append(param)
         if isinstance(m, nn.Linear):
             group_decay.append(m.weight)
             if m.bias is not None:
@@ -101,12 +105,18 @@ def group_weight(module):
             group_decay.append(m.weight)
             if m.bias is not None:
                 group_no_decay.append(m.bias)
+                #print(m.bias)
         elif isinstance(m, nn.modules.batchnorm._BatchNorm):
             if m.weight is not None:
                 group_no_decay.append(m.weight)
             if m.bias is not None:
                 group_no_decay.append(m.bias)
 
+    # print('==============')
+    # for name, param in module.named_parameters():
+    #     print(name, param.size())
+
+    
     assert len(list(module.parameters())) == len(group_decay) + len(group_no_decay)
     groups = [dict(params=group_decay), dict(params=group_no_decay, weight_decay=.0)]
     return groups
@@ -114,14 +124,14 @@ def group_weight(module):
 
 def create_optimizers(nets, cfg):
     (net_encoder, net_decoder, crit) = nets
-    optimizer_encoder = torch.optim.SGD(
-        group_weight(net_encoder),
-        lr=cfg.TRAIN.lr_encoder,
-        momentum=cfg.TRAIN.beta1,
-        weight_decay=cfg.TRAIN.weight_decay)
     optimizer_decoder = torch.optim.SGD(
         group_weight(net_decoder),
         lr=cfg.TRAIN.lr_decoder,
+        momentum=cfg.TRAIN.beta1,
+        weight_decay=cfg.TRAIN.weight_decay)
+    optimizer_encoder = torch.optim.SGD(
+        group_weight(net_encoder),
+        lr=cfg.TRAIN.lr_encoder,
         momentum=cfg.TRAIN.beta1,
         weight_decay=cfg.TRAIN.weight_decay)
     return (optimizer_encoder, optimizer_decoder)
@@ -176,6 +186,15 @@ def main(cfg, gpus):
         drop_last=True,
         pin_memory=True)
     print('1 Epoch = {} iters'.format(cfg.TRAIN.epoch_iters))
+
+    # for i in range(5):
+    #     data_sample = dataset_train[i]
+    #     img = data_sample['img_data'] #    Bx3x304x400
+    #     label = data_sample['seg_label'] # Bx38x50
+    #     print('image size is:')
+    #     print(img.size())
+    #     print('label size is:')
+    #     print(label.size())
 
     # create loader iterator
     iterator_train = iter(loader_train)
