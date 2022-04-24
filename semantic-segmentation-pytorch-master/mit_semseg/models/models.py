@@ -46,12 +46,6 @@ class SegmentationModule(SegmentationModuleBase):
 
                 conv_out = self.encoder(feed_dict['img_data'], return_feature_maps=True)
                 pred = self.decoder(conv_out)
-            # print('input image size is:')
-            # print(feed_dict['img_data'].size())
-            # print('input label size is:')
-            # print(feed_dict['seg_label'].size())
-            # print('prediction size is:')
-            # print(pred.size())
             
             loss = self.crit(pred, feed_dict['seg_label'])
             if self.deep_sup_scale is not None:
@@ -167,6 +161,12 @@ class ModelBuilder:
                 fpn_dim=512)
         elif arch == 'danet':
             net_decoder = DANet(
+                num_class=num_class,
+                fc_dim=fc_dim,
+                use_softmax=use_softmax
+            )
+        elif arch == 'ppm_danet':
+            net_decoder = PPM_DANet(
                 num_class=num_class,
                 fc_dim=fc_dim,
                 use_softmax=use_softmax
@@ -439,9 +439,7 @@ class PPM(nn.Module):
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
 
-        input_size = conv5.size()
-        #print('conv5 size:')
-        #print(input_size)
+        input_size = conv5.size()   # C x 2048 x W x H
 
         ppm_out = [conv5]
         for pool_scale in self.ppm:
@@ -449,9 +447,9 @@ class PPM(nn.Module):
                 pool_scale(conv5),
                 (input_size[2], input_size[3]),
                 mode='bilinear', align_corners=False))
-        ppm_out = torch.cat(ppm_out, 1)
+        ppm_out = torch.cat(ppm_out, 1)    # C x 4096 x W x H (4096 = 2048 + 4 x 512)
 
-        x = self.conv_last(ppm_out)
+        x = self.conv_last(ppm_out) # C x 150 x W x H
 
         if self.use_softmax:  # is True during inference
             x = nn.functional.interpolate(
@@ -572,8 +570,6 @@ class UPerNet(nn.Module):
         conv5 = conv_out[-1]
 
         input_size = conv5.size()
-        #print('conv5 size:')
-        #print(input_size)
         ppm_out = [conv5]
         for pool_scale, pool_conv in zip(self.ppm_pooling, self.ppm_conv):
             ppm_out.append(pool_conv(nn.functional.interpolate(
@@ -635,6 +631,8 @@ class PAM_Module(nn.Module):
 
         energy = torch.bmm(projected_query, projected_key) # N x (HxW) x (HxW)
         attention = self.softmax(energy).permute(0,2,1)
+        import numpy as np
+        np.save('./attention.npy',attention.cpu().numpy())
 
         out = torch.bmm(projected_value, attention) #  N x C x (H*W)
         out = out.view(N, C, H, W)                  #  N x C x H x W
@@ -700,7 +698,7 @@ class DANet(nn.Module):
 
     def forward(self, conv_out, segSize=None):
 
-        x = conv_out[-1]
+        x = conv_out[-1] # 2048 x H x W
 
         feat1 = self.conv5a(x)   # 512 x H' x W'
         sa_feat = self.sa(feat1) # 512 x H' x W'
@@ -713,6 +711,77 @@ class DANet(nn.Module):
         #sc_output = self.conv7(sc_conv)
 
         feat_sum = sa_conv+sc_conv
+        
+        x = self.conv8(feat_sum)
+
+        if self.use_softmax:  # is True during inference
+            x = nn.functional.interpolate(
+                x, size=segSize, mode='bilinear', align_corners=False)
+            x = nn.functional.softmax(x, dim=1)
+        else:
+            x = nn.functional.log_softmax(x, dim=1)
+        return x
+
+class PPM_DANet(nn.Module):
+    def __init__(self, num_class=150, fc_dim=4096,
+                 use_softmax=False, pool_scales=(1, 2, 3, 6)):
+        super().__init__()
+        self.use_softmax = use_softmax
+
+        self.ppm = []
+        for scale in pool_scales:
+            self.ppm.append(nn.Sequential(
+                nn.AdaptiveAvgPool2d(scale),
+                nn.Conv2d(fc_dim, 512, kernel_size=1, bias=False),
+                BatchNorm2d(512),
+                nn.ReLU(inplace=True)
+            ))
+        self.ppm = nn.ModuleList(self.ppm)
+
+        in_channels = fc_dim+len(pool_scales)*512 # 4096
+        inter_channels = in_channels // 4 #1024
+
+        self.conv5a = nn.Sequential(nn.Conv2d(in_channels, inter_channels, 3, padding=1, bias=False),
+                                   BatchNorm2d(inter_channels),
+                                   nn.ReLU())
+
+        self.conv5c = nn.Sequential(nn.Conv2d(in_channels, inter_channels, 3, padding=1, bias=False),
+                                   BatchNorm2d(inter_channels),
+                                   nn.ReLU())
+
+        self.sa = PAM_Module(inter_channels)
+        self.sc = CAM_Module(inter_channels)
+
+        self.conv51 = nn.Sequential(nn.Conv2d(inter_channels, inter_channels, 3, padding=1, bias=False),
+                                   BatchNorm2d(inter_channels),
+                                   nn.ReLU())
+        self.conv52 = nn.Sequential(nn.Conv2d(inter_channels, inter_channels, 3, padding=1, bias=False),
+                                   BatchNorm2d(inter_channels),
+                                   nn.ReLU())
+        self.conv8 = nn.Sequential(nn.Dropout2d(0.1, False), nn.Conv2d(inter_channels, num_class, 1))
+
+    def forward(self, conv_out, segSize=None):
+        conv5 = conv_out[-1]
+
+        input_size = conv5.size()   # C x 2048 x W x H
+
+        ppm_out = [conv5]
+        for pool_scale in self.ppm:
+            ppm_out.append(nn.functional.interpolate(
+                pool_scale(conv5),
+                (input_size[2], input_size[3]),
+                mode='bilinear', align_corners=False))
+        x = torch.cat(ppm_out, 1)    # C x 4096 x W x H (4096 = 2048 + 4 x 512)
+
+        feat1 = self.conv5a(x)   # 1024 x H' x W'
+        sa_feat = self.sa(feat1) # 1024 x H' x W'
+        sa_conv = self.conv51(sa_feat)   # 1024 x H'' x W''
+
+        feat2 = self.conv5c(x)
+        sc_feat = self.sc(feat2)
+        sc_conv = self.conv52(sc_feat)
+
+        feat_sum = sa_conv+sc_conv # 1024 x H'' x W''
         
         x = self.conv8(feat_sum)
 

@@ -3,7 +3,7 @@ DATASET:
   list_train: "./data/training.odgt"
   list_val: "./data/validation.odgt"
   num_class: 150
-  imgSizes: (300, 375, 450, 525, 600)
+  imgSizes: (512,)
   imgMaxSize: 1000
   padding_constant: 8
   segm_downsampling_rate: 8
@@ -39,4 +39,4 @@ TEST:
   checkpoint: "epoch_20.pth"
   result: "./"
 
-DIR: "ckpt/ade20k-resnet18dilated-ppm_deepsup"
+DIR: "ckpt/ade20k-resnet50dilated-danet/"
