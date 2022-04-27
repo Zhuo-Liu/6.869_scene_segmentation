@@ -1,18 +1,18 @@
 DATASET:
   root_dataset: "./data/"
-  list_train: "./data/training.odgt"
-  list_val: "./data/validation.odgt"
-  num_class: 150
+  list_train: "./data/coco_training.odgt"
+  list_val: "./data/coco_test.odgt"
+  num_class: 182
   imgSizes: (300, 375, 450, 525, 600)
   imgMaxSize: 1000
-  padding_constant: 32
-  segm_downsampling_rate: 4
+  padding_constant: 8
+  segm_downsampling_rate: 8
   random_flip: True
 
 MODEL:
-  arch_encoder: "resnet101"
-  arch_decoder: "upernet"
-  fc_dim: 2048
+  arch_encoder: "resnet18dilated"
+  arch_decoder: "ppm_deepsup"
+  fc_dim: 512
 
 TRAIN:
   batch_size_per_gpu: 2
@@ -20,8 +20,8 @@ TRAIN:
   start_epoch: 0
   epoch_iters: 5000
   optim: "SGD"
-  lr_encoder: 0.1
-  lr_decoder: 0.1
+  lr_encoder: 0.02
+  lr_decoder: 0.02
   lr_pow: 0.9
   beta1: 0.9
   weight_decay: 1e-4
@@ -33,10 +33,10 @@ TRAIN:
 
 VAL:
   visualize: True
-  checkpoint: "epoch_5.pth"
+  checkpoint: "epoch_10.pth"
 
 TEST:
-  checkpoint: "epoch_5.pth"
+  checkpoint: "epoch_10.pth"
   result: "./"
 
-DIR: "ckpt/ade20k-resnet101-upernet"
+DIR: "ckpt/ade20k-resnet18dilated-ppm_deepsup"

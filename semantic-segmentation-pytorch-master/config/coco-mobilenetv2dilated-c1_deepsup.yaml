@@ -5,18 +5,18 @@ DATASET:
   num_class: 182
   imgSizes: (300, 375, 450, 525, 600)
   imgMaxSize: 1000
-  padding_constant: 32
-  segm_downsampling_rate: 4
+  padding_constant: 8
+  segm_downsampling_rate: 8
   random_flip: True
 
 MODEL:
-  arch_encoder: "resnet101"
-  arch_decoder: "upernet"
-  fc_dim: 2048
+  arch_encoder: "mobilenetv2dilated"
+  arch_decoder: "c1_deepsup"
+  fc_dim: 320
 
 TRAIN:
-  batch_size_per_gpu: 2
-  num_epoch: 5
+  batch_size_per_gpu: 3
+  num_epoch: 10
   start_epoch: 0
   epoch_iters: 5000
   optim: "SGD"
@@ -33,10 +33,10 @@ TRAIN:
 
 VAL:
   visualize: True
-  checkpoint: "epoch_5.pth"
+  checkpoint: "epoch_10.pth"
 
 TEST:
-  checkpoint: "epoch_5.pth"
+  checkpoint: "epoch_10.pth"
   result: "./"
 
-DIR: "ckpt/coco-resnet101-upernet"
+DIR: "ckpt/coco-mobilenetv2dilated-c1_deepsup"
