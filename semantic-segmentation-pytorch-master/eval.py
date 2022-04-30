@@ -18,7 +18,7 @@ from mit_semseg.lib.utils import as_numpy
 from PIL import Image
 from tqdm import tqdm
 
-colors = loadmat('./drive/MyDrive/scene-segmentation/data/color150.mat')['colors']
+colors = loadmat('data/color182.mat')['colors']
 
 
 def visualize_result(data, pred, dir_result):
@@ -133,7 +133,7 @@ def main(cfg, gpu):
         batch_size=cfg.VAL.batch_size,
         shuffle=False,
         collate_fn=user_scattered_collate,
-        num_workers=5,
+        num_workers=1,
         drop_last=True)
 
     segmentation_module.cuda()

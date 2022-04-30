@@ -42,8 +42,17 @@ class SegmentationModule(SegmentationModuleBase):
             if self.deep_sup_scale is not None: # use deep supervision technique
                 (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
             else:
-                pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
+                #pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
 
+                conv_out = self.encoder(feed_dict['img_data'], return_feature_maps=True)
+                pred = self.decoder(conv_out)
+            # print('input image size is:')
+            # print(feed_dict['img_data'].size())
+            # print('input label size is:')
+            # print(feed_dict['seg_label'].size())
+            # print('prediction size is:')
+            # print(pred.size())
+            
             loss = self.crit(pred, feed_dict['seg_label'])
             if self.deep_sup_scale is not None:
                 loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
@@ -156,6 +165,12 @@ class ModelBuilder:
                 fc_dim=fc_dim,
                 use_softmax=use_softmax,
                 fpn_dim=512)
+        elif arch == 'danet':
+            net_decoder = DANet(
+                num_class=num_class,
+                fc_dim=fc_dim,
+                use_softmax=use_softmax
+            )
         else:
             raise Exception('Architecture undefined!')
 
@@ -425,6 +440,9 @@ class PPM(nn.Module):
         conv5 = conv_out[-1]
 
         input_size = conv5.size()
+        #print('conv5 size:')
+        #print(input_size)
+
         ppm_out = [conv5]
         for pool_scale in self.ppm:
             ppm_out.append(nn.functional.interpolate(
@@ -554,6 +572,8 @@ class UPerNet(nn.Module):
         conv5 = conv_out[-1]
 
         input_size = conv5.size()
+        #print('conv5 size:')
+        #print(input_size)
         ppm_out = [conv5]
         for pool_scale, pool_conv in zip(self.ppm_pooling, self.ppm_conv):
             ppm_out.append(pool_conv(nn.functional.interpolate(
@@ -593,4 +613,113 @@ class UPerNet(nn.Module):
 
         x = nn.functional.log_softmax(x, dim=1)
 
+        return x
+
+# Dual Attention Network
+class PAM_Module(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        
+        self.query_conv = nn.Conv2d(in_channels, in_channels//8, 1)
+        self.key_conv = nn.Conv2d(in_channels, in_channels//8, 1)
+        self.value_conv = nn.Conv2d(in_channels, in_channels, 1)
+
+        self.gamma = nn.Parameter(torch.zeros(1))
+        self.softmax = nn.Softmax(dim=-1)
+    
+    def forward(self ,x):
+        N,C,H,W = x.size()                                                  # N x C x H x W
+        projected_query = self.query_conv(x).view(N,-1,H*W).permute(0,2,1)  # N x (H*W) x C'
+        projected_key = self.key_conv(x).view(N,-1,H*W)                     # N x C' x (H*W)
+        projected_value = self.value_conv(x).view(N,-1,H*W)                 # N x C x (H*W)
+
+        energy = torch.bmm(projected_query, projected_key) # N x (HxW) x (HxW)
+        attention = self.softmax(energy).permute(0,2,1)
+
+        out = torch.bmm(projected_value, attention) #  N x C x (H*W)
+        out = out.view(N, C, H, W)                  #  N x C x H x W
+
+        out= self.gamma*out + x
+        return out
+
+class CAM_Module(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        self.gamma = nn.Parameter(torch.zeros(1))
+        self.softmax = nn.Softmax(dim=-1)
+    
+    def forward(self, x):
+        N,C,H,W = x.size() #   N x C x H x W
+        projected_query = x.view(N, C, -1)              # N x C x (H*W)
+        projected_key = x.view(N, C, -1).permute(0,2,1) # N x (H*W) x C
+        projected_value = x.view(N, C, -1)              # N x C x (H*W)
+
+        energy = torch.bmm(projected_query, projected_key) # N x C x C
+        energy_new = torch.max(energy, -1, keepdim=True)[0].expand_as(energy)-energy
+        attention = self.softmax(energy_new) # N x C x C
+
+        out = torch.bmm(attention, projected_value) #  N x C x (H*W)
+        out = out.view(N, C, H, W) #  N x C x H x W
+
+        out= self.gamma*out + x
+        return out
+
+
+class DANet(nn.Module):
+    def __init__(self, num_class=150, fc_dim=4096, use_softmax=False, 
+                 in_channels=2048):
+        super().__init__()
+        #super(DANet, self).__init__()
+
+        self.use_softmax= use_softmax
+
+        inter_channels = in_channels // 4
+
+        self.conv5a = nn.Sequential(nn.Conv2d(in_channels, inter_channels, 3, padding=1, bias=False),
+                                   BatchNorm2d(inter_channels),
+                                   nn.ReLU())
+
+        self.conv5c = nn.Sequential(nn.Conv2d(in_channels, inter_channels, 3, padding=1, bias=False),
+                                   BatchNorm2d(inter_channels),
+                                   nn.ReLU())
+
+        self.sa = PAM_Module(inter_channels)
+        self.sc = CAM_Module(inter_channels)
+
+        self.conv51 = nn.Sequential(nn.Conv2d(inter_channels, inter_channels, 3, padding=1, bias=False),
+                                   BatchNorm2d(inter_channels),
+                                   nn.ReLU())
+        self.conv52 = nn.Sequential(nn.Conv2d(inter_channels, inter_channels, 3, padding=1, bias=False),
+                                   BatchNorm2d(inter_channels),
+                                   nn.ReLU())
+
+        #self.conv6 = nn.Sequential(nn.Dropout2d(0.1, False), nn.Conv2d(inter_channels, num_class, 1))
+        #self.conv7 = nn.Sequential(nn.Dropout2d(0.1, False), nn.Conv2d(inter_channels, num_class, 1))
+
+        self.conv8 = nn.Sequential(nn.Dropout2d(0.1, False), nn.Conv2d(inter_channels, num_class, 1))
+
+    def forward(self, conv_out, segSize=None):
+
+        x = conv_out[-1]
+
+        feat1 = self.conv5a(x)   # 512 x H' x W'
+        sa_feat = self.sa(feat1) # 512 x H' x W'
+        sa_conv = self.conv51(sa_feat)   # 512 x H'' x W''
+        #sa_output = self.conv6(sa_conv)  # 150 x H'' x W''
+
+        feat2 = self.conv5c(x)
+        sc_feat = self.sc(feat2)
+        sc_conv = self.conv52(sc_feat)
+        #sc_output = self.conv7(sc_conv)
+
+        feat_sum = sa_conv+sc_conv
+        
+        x = self.conv8(feat_sum)
+
+        if self.use_softmax:  # is True during inference
+            x = nn.functional.interpolate(
+                x, size=segSize, mode='bilinear', align_corners=False)
+            x = nn.functional.softmax(x, dim=1)
+        else:
+            x = nn.functional.log_softmax(x, dim=1)
         return x

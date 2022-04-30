@@ -1,7 +1,7 @@
 DATASET:
-  root_dataset: "./drive/MyDrive/scene-segmentation/data/"
-  list_train: "./drive/MyDrive/scene-segmentation/data/coco_training.odgt"
-  list_val: "./drive/MyDrive/scene-segmentation/data/coco_test.odgt"
+  root_dataset: "./data/"
+  list_train: "./data/coco_training.odgt"
+  list_val: "./data/coco_test.odgt"
   num_class: 182
   imgSizes: (300, 375, 450, 525, 600)
   imgMaxSize: 1000
@@ -16,7 +16,7 @@ MODEL:
 
 TRAIN:
   batch_size_per_gpu: 2
-  num_epoch: 40
+  num_epoch: 5
   start_epoch: 0
   epoch_iters: 5000
   optim: "SGD"
@@ -32,11 +32,11 @@ TRAIN:
   seed: 304
 
 VAL:
-  visualize: False
-  checkpoint: "epoch_50.pth"
+  visualize: True
+  checkpoint: "epoch_5.pth"
 
 TEST:
-  checkpoint: "epoch_50.pth"
+  checkpoint: "epoch_5.pth"
   result: "./"
 
 DIR: "ckpt/coco-resnet101-upernet"
