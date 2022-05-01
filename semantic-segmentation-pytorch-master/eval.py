@@ -18,7 +18,7 @@ from mit_semseg.lib.utils import as_numpy
 from PIL import Image
 from tqdm import tqdm
 
-colors = loadmat('data/color182.mat')['colors']
+colors = loadmat('data/color183.mat')['colors']
 
 
 def visualize_result(data, pred, dir_result):
