@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from . import resnet, resnext, mobilenet, hrnet
 from mit_semseg.lib.nn import SynchronizedBatchNorm2d
+import numpy as np
 BatchNorm2d = SynchronizedBatchNorm2d
 
 
@@ -624,15 +625,17 @@ class PAM_Module(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
     
     def forward(self ,x):
-        N,C,H,W = x.size()                                                  # N x C x H x W
+        N,C,H,W = x.size()                                               # N x C x H x W
         projected_query = self.query_conv(x).view(N,-1,H*W).permute(0,2,1)  # N x (H*W) x C'
         projected_key = self.key_conv(x).view(N,-1,H*W)                     # N x C' x (H*W)
         projected_value = self.value_conv(x).view(N,-1,H*W)                 # N x C x (H*W)
 
         energy = torch.bmm(projected_query, projected_key) # N x (HxW) x (HxW)
-        attention = self.softmax(energy).permute(0,2,1)
-        import numpy as np
-        np.save('./attention.npy',attention.cpu().numpy())
+        attention = self.softmax(energy)
+        #np.save('./attention.npy',attention.cpu().numpy())
+
+        attention = attention.permute(0,2,1)
+        #np.save('./attention.npy',attention.cpu().numpy())
 
         out = torch.bmm(projected_value, attention) #  N x C x (H*W)
         out = out.view(N, C, H, W)                  #  N x C x H x W
@@ -707,7 +710,9 @@ class DANet(nn.Module):
 
         feat2 = self.conv5c(x)
         sc_feat = self.sc(feat2)
+        #np.save('./sc_conv.npy',sc_feat.permute(0,2,3,1).cpu().numpy())
         sc_conv = self.conv52(sc_feat)
+        #np.save('./sc_conv.npy',sc_conv.permute(0,2,3,1).cpu().numpy())
         #sc_output = self.conv7(sc_conv)
 
         feat_sum = sa_conv+sc_conv
