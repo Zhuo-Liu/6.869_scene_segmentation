@@ -1,5 +1,5 @@
-# 6.869_scene_segmentation
- 2022 Spring 6.869 project
+# Scene Segmentation with Reweighting, Multi-scale Feature, and Dual Attention
+2022 Spring 6.869 project
 
 Steps to train:
 1. Copy everything to Google Drive
