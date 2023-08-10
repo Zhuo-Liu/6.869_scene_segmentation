@@ -7,4 +7,5 @@ Steps to train:
 3. Start training by running run_scene_seg.ipynb, change config by changing the arg after --cfg.
 4. To train on single GPU (only one GPU allowed on Colab), change the directories "root_dataset, list_train, list_val" under /config/ to Google Drive data directories. Also change "workers" to 2.
 
-[embed]https://github.com/Zhuo-Liu/6.869_scene_segmentation/blob/main/report.pdf[/embed]
+## Result
+https://github.com/Zhuo-Liu/6.869_scene_segmentation/blob/main/report.pdf
